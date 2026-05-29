@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Claude Desktop Plus",
+  "version": "0.1.0",
+  "identifier": "dev.claude-desktop-plus",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://127.0.0.1:1422",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Claude Desktop Plus",
+        "width": 1160,
+        "height": 760,
+        "minWidth": 980,
+        "minHeight": 640,
+        "decorations": true,
+        "dragDropEnabled": false,
+        "backgroundColor": [248, 250, 252, 255]
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": [
+      "resources/language-packs/*",
+      "resources/desktop-translations/*",
+      "resources/ion-dist-i18n/*",
+      "resources/ion-dist-i18n/statsig/*",
+      "resources/web-inject/*"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "TAURI_UPDATER_PUBKEY_PLACEHOLDER",
+      "endpoints": [
+        "https://github.com/duanluan/claude-desktop-plus/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
