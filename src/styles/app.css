@@ -1,0 +1,235 @@
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: #0f172a;
+  background: #f5f7fb;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  letter-spacing: 0;
+}
+
+.app-shell {
+  min-height: 100%;
+  background:
+    linear-gradient(180deg, rgba(20, 184, 166, 0.08), transparent 240px),
+    #f5f7fb;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 22px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  color: #fff;
+  font-weight: 700;
+  place-items: center;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  border-radius: 8px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.brand p {
+  margin: 2px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.app-content {
+  padding: 22px 28px 32px;
+}
+
+.panel-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+}
+
+.narrow-card {
+  max-width: 760px;
+}
+
+.status-list {
+  display: grid;
+  gap: 14px;
+}
+
+.status-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.status-list span,
+.settings-row p {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.status-list strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.install-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.install-item {
+  display: grid;
+  gap: 6px;
+  min-height: 78px;
+  padding: 14px;
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+}
+
+.install-item.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.install-item span {
+  font-weight: 600;
+}
+
+.install-item small {
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+}
+
+.settings-row strong {
+  display: block;
+}
+
+.settings-row p,
+.about-copy {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.about-list {
+  display: grid;
+  gap: 16px;
+}
+
+.update-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.update-notes {
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.about-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.about-version span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.about-version strong {
+  font-size: 14px;
+}
+
+.settings-select {
+  width: min(280px, 58vw);
+}
+
+.doctor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.doctor-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+@media (max-width: 900px) {
+  .app-header {
+    align-items: flex-start;
+    height: auto;
+    padding: 18px;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
+}

@@ -1,0 +1,274 @@
+name: release-desktop
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-22.04
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: resolve version
+        id: version
+        run: |
+          app_version="$(node -p "require('./package.json').version")"
+          tag_name="v${app_version}"
+          echo "app_version=${app_version}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${tag_name}" >> "$GITHUB_OUTPUT"
+
+      - name: validate pushed tag
+        if: github.event_name == 'push'
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "${{ steps.version.outputs.tag_name }}" ]; then
+            echo "Git tag ${GITHUB_REF_NAME} does not match package.json version ${{ steps.version.outputs.tag_name }}" >&2
+            exit 1
+          fi
+
+      - name: ensure draft release exists
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_DESKTOP_PLUS_RELEASE_TOKEN || github.token }}
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+          RELEASE_NAME: claude-desktop-plus v${{ steps.version.outputs.app_version }}
+          RELEASE_NOTES: .github/release-notes/${{ steps.version.outputs.tag_name }}.md
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "${RELEASE_NOTES}" ]; then
+            echo "Release notes ${RELEASE_NOTES} not found" >&2
+            exit 1
+          fi
+
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}" --jq '.id' 2>/dev/null || true)"
+          if ! [[ "${release_id}" =~ ^[0-9]+$ ]]; then
+            release_id=""
+          fi
+
+          if [ -z "${release_id}" ]; then
+            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+              --method POST \
+              -f tag_name="${TAG_NAME}" \
+              -f name="${RELEASE_NAME}" \
+              -f target_commitish="main" \
+              -F draft=true \
+              -F prerelease=false \
+              -F body=@"${RELEASE_NOTES}" \
+              --jq '.id')"
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              --method PATCH \
+              -f name="${RELEASE_NAME}" \
+              -F draft=true \
+              -F prerelease=false \
+              -F body=@"${RELEASE_NOTES}" >/dev/null
+          fi
+
+          while IFS=$'\t' read -r asset_id asset_name; do
+            if [ -z "${asset_id}" ]; then
+              continue
+            fi
+
+            echo "Deleting stale release asset ${asset_name}"
+            gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+              --method DELETE >/dev/null
+          done < <(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets" \
+            --paginate \
+            --jq '.[] | [.id, .name] | @tsv')
+
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
+
+  publish-tauri:
+    needs: prepare-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: windows-latest
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: install Rust stable
+        if: matrix.platform != 'macos-latest'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install Rust stable with macOS targets
+        if: matrix.platform == 'macos-latest'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: install linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 rpm
+
+      - name: install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: write generated release config
+        env:
+          TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+        run: node -e "import('./scripts/release/shared.mjs').then(m => m.writeGeneratedReleaseConfig())"
+
+      - name: build and upload desktop bundles
+        uses: tauri-apps/tauri-action@action-v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_DESKTOP_PLUS_RELEASE_TOKEN || github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          owner: duanluan
+          repo: claude-desktop-plus
+          projectPath: .
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
+          tagName: ${{ needs.prepare-release.outputs.tag_name }}
+          tauriScript: pnpm tauri
+          updaterJsonPreferNsis: true
+          args: >-
+            ${{ matrix.args }} --config src-tauri/tauri.release.generated.conf.json
+
+  cleanup-release-assets:
+    needs:
+      - prepare-release
+      - publish-tauri
+    if: ${{ always() && needs.prepare-release.result == 'success' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: remove detached updater signatures
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_DESKTOP_PLUS_RELEASE_TOKEN || github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+
+          while IFS=$'\t' read -r asset_id asset_name; do
+            if [ -z "${asset_id}" ]; then
+              continue
+            fi
+
+            echo "Deleting detached signature ${asset_name}"
+            gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+              --method DELETE >/dev/null
+          done < <(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" \
+            --paginate \
+            --jq '.[] | select(.name | endswith(".sig")) | [.id, .name] | @tsv')
+
+  publish-release:
+    needs:
+      - prepare-release
+      - publish-tauri
+      - cleanup-release-assets
+    if: ${{ success() }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: verify updater manifest
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_DESKTOP_PLUS_RELEASE_TOKEN || github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+
+          gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" \
+            --paginate \
+            --jq '.[].name' \
+            > asset-names.txt
+
+          asset_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" \
+            --paginate \
+            --jq '.[] | select(.name == "latest.json") | .url' \
+            | head -n 1)"
+
+          if [ -z "${asset_url}" ]; then
+            echo "latest.json not found in release assets" >&2
+            exit 1
+          fi
+
+          if ! grep -qx "SHA256SUMS" asset-names.txt; then
+            echo "SHA256SUMS not found in release assets" >&2
+            exit 1
+          fi
+
+          gh api "${asset_url}" \
+            -H "Accept: application/octet-stream" \
+            > latest.json
+
+          node <<'NODE'
+          const fs = require("node:fs");
+
+          const manifest = JSON.parse(fs.readFileSync("latest.json", "utf8"));
+          const assetNames = fs
+            .readFileSync("asset-names.txt", "utf8")
+            .split(/\r?\n/)
+            .filter(Boolean);
+          const requiredPlatforms = [
+            "windows-x86_64",
+            "linux-x86_64",
+            "darwin-x86_64",
+            "darwin-aarch64",
+          ];
+
+          if (typeof manifest.version !== "string" || manifest.version.length === 0) {
+            throw new Error("latest.json is missing version");
+          }
+
+          for (const platform of requiredPlatforms) {
+            const item = manifest.platforms?.[platform];
+
+            if (!item?.url || !item?.signature) {
+              throw new Error(`latest.json is missing URL or signature for ${platform}`);
+            }
+          }
+
+          const detachedSignatures = assetNames.filter((name) => name.endsWith(".sig"));
+          if (detachedSignatures.length > 0) {
+            throw new Error(`Detached signature assets should have been removed: ${detachedSignatures.join(", ")}`);
+          }
+          NODE
+
+      - name: publish public release
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_DESKTOP_PLUS_RELEASE_TOKEN || github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            --method PATCH \
+            -F draft=false >/dev/null

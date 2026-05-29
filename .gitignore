@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+.baoyu-skills/
+
+src/auto-imports.d.ts
+src/components.d.ts
+
+src-tauri/target/
+src-tauri/gen/
+src-tauri/tauri.release.generated.conf.json
+.release-cache/
+release-artifacts/

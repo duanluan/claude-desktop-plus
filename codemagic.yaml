@@ -1,0 +1,55 @@
+workflows:
+  macos-release-desktop:
+    name: macOS desktop release
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      groups:
+        - claude-desktop-plus-release
+      node: 24.11.1
+      xcode: latest
+      vars:
+        HOMEBREW_NO_AUTO_UPDATE: "1"
+        CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+        CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+    cache:
+      cache_paths:
+        - ~/.cargo/registry
+        - ~/.cargo/git
+        - ~/.rustup/toolchains
+        - ~/.pnpm-store
+        - node_modules
+        - src-tauri/target
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*"
+          include: true
+    scripts:
+      - name: Install system tools
+        script: |
+          set -euo pipefail
+          node --version
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm --version
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build and upload macOS desktop bundles
+        script: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          pnpm install --frozen-lockfile
+          pnpm release:doctor
+          pnpm release:desktop --target aarch64-apple-darwin --target x86_64-apple-darwin --upload
+          pnpm release:publish --draft --platforms all
+    artifacts:
+      - src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
+      - src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.tar.gz
+      - src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.dmg
+      - src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.tar.gz
